@@ -21,17 +21,39 @@ pub struct LiveRoomInfo {
     keyframe: Url,
     live_status: LiveStatus,
     online: u64,
+    #[serde(with = "live_room_tag_name_serde")]
     tag_name: Vec<String>,
     uname: String,
     uid: u64,
     title: String,
 }
 
+mod live_room_tag_name_serde {
+    use serde::{self, Deserialize, Deserializer, Serializer};
+    pub fn serialize<S>(tag_name: &Vec<String>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&tag_name.join(","))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(s.split(",").map(|s| s.to_string()).collect())
+    }
+}
+
 /// Represeting current live room status
 #[derive(Debug, PartialEq)]
 pub enum LiveStatus {
+    /// Represeting u8 number: 0
     Sleep,
+    /// Represeting u8 number: 1
     Living,
+    /// Represeting u8 number: 2
     Loop,
 }
 
@@ -90,18 +112,73 @@ fn test_u8_2_live_status() {
 }
 
 #[test]
-#[should_panic]
 fn test_invalid_live_status_de() {
     #[derive(Serialize, Deserialize)]
     struct TestStruct {
         status: LiveStatus,
     }
+
+    use std::panic::catch_unwind as catch;
+
     let input = r#" { "status": 3 } "#;
-    serde_json::from_str::<'_, TestStruct>(input).unwrap();
+    let result = catch(|| serde_json::from_str::<'_, TestStruct>(input).unwrap());
+    assert!(result.is_err());
 
     let input = r#" { "status": -1 } "#;
-    serde_json::from_str::<'_, TestStruct>(input).unwrap();
+    let result = catch(|| serde_json::from_str::<'_, TestStruct>(input).unwrap());
+    assert!(result.is_err());
 
     let input = r#" { "status": "foo" } "#;
-    serde_json::from_str::<'_, TestStruct>(input).unwrap();
+    let result = catch(|| serde_json::from_str::<'_, TestStruct>(input).unwrap());
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_json_2_live_room() {
+    let input = r#"
+        {
+            "title": "【B限】玩个毛线",
+            "room_id": 22637261,
+            "uid": 672328094,
+            "online": 4087370,
+            "live_time": 0,
+            "live_status": 2,
+            "short_id": 0,
+            "area": 6,
+            "area_name": "生活娱乐",
+            "area_v2_id": 371,
+            "area_v2_name": "虚拟主播",
+            "area_v2_parent_name": "虚拟主播",
+            "area_v2_parent_id": 9,
+            "uname": "嘉然今天吃什么",
+            "face": "http://i2.hdslb.com/bfs/face/d399d6f5cf7943a996ae96999ba3e6ae2a2988de.jpg",
+            "tag_name": "日常,学习,萌宠,厨艺,手机直播",
+            "tags": "",
+            "cover_from_user": "http://i0.hdslb.com/bfs/live/new_room_cover/f3ed7a782c13086e536ec8bc6e9593bb4918f905.jpg",
+            "keyframe": "http://i0.hdslb.com/bfs/live-key-frame/keyframe041722000000226372619dr3m8.jpg",
+            "lock_till": "0000-00-00 00:00:00",
+            "hidden_till": "0000-00-00 00:00:00",
+            "broadcast_type": 0
+        }
+    "#;
+
+    let info: LiveRoomInfo = serde_json::from_str(input).unwrap();
+    assert_eq!(info.title, "【B限】玩个毛线");
+    assert_eq!(info.live_status, LiveStatus::Loop);
+    assert_eq!(
+        info.tag_name,
+        vec![
+            "日常".to_string(),
+            "学习".to_string(),
+            "萌宠".to_string(),
+            "厨艺".to_string(),
+            "手机直播".to_string(),
+        ]
+    );
+    assert_eq!(
+        info.cover_from_user,
+        Url::parse(
+            "http://i0.hdslb.com/bfs/live/new_room_cover/f3ed7a782c13086e536ec8bc6e9593bb4918f905.jpg"
+        ).unwrap()
+    );
 }
