@@ -28,6 +28,7 @@ pub struct LiveRoomInfo {
 }
 
 /// Represeting current live room status
+#[derive(Debug, PartialEq)]
 pub enum LiveStatus {
     Sleep,
     Living,
@@ -66,4 +67,41 @@ impl<'de> Deserialize<'de> for LiveStatus {
 
         Ok(stat)
     }
+}
+
+#[test]
+fn test_u8_2_live_status() {
+    #[derive(Serialize, Deserialize)]
+    struct TestStruct {
+        status: LiveStatus,
+    }
+
+    let input = r#" { "status": 1 } "#;
+    let output: TestStruct = serde_json::from_str(input).unwrap();
+    assert_eq!(output.status, LiveStatus::Living);
+
+    let input = r#" { "status": 2 } "#;
+    let output: TestStruct = serde_json::from_str(input).unwrap();
+    assert_eq!(output.status, LiveStatus::Loop);
+
+    let input = r#" { "status": 0 } "#;
+    let output: TestStruct = serde_json::from_str(input).unwrap();
+    assert_eq!(output.status, LiveStatus::Sleep);
+}
+
+#[test]
+#[should_panic]
+fn test_invalid_live_status_de() {
+    #[derive(Serialize, Deserialize)]
+    struct TestStruct {
+        status: LiveStatus,
+    }
+    let input = r#" { "status": 3 } "#;
+    serde_json::from_str::<'_, TestStruct>(input).unwrap();
+
+    let input = r#" { "status": -1 } "#;
+    serde_json::from_str::<'_, TestStruct>(input).unwrap();
+
+    let input = r#" { "status": "foo" } "#;
+    serde_json::from_str::<'_, TestStruct>(input).unwrap();
 }
