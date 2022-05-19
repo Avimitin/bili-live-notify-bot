@@ -12,22 +12,37 @@ pub struct MultiLiveRoomStatus {
     data: HashMap<String, LiveRoomInfo>,
 }
 
-/// Live room information
-#[derive(Serialize, Deserialize)]
-pub struct LiveRoomInfo {
-    area_name: String,
-    area_v2_name: String,
-    cover_from_user: Url,
-    keyframe: Url,
-    live_status: LiveStatus,
-    online: u64,
-    #[serde(with = "live_room_tag_name_serde")]
-    tag_name: Vec<String>,
-    uname: String,
-    uid: u64,
-    title: String,
+impl MultiLiveRoomStatus {
+    /// After sending query to the bilibili API, all live room data will be store in
+    /// a hashmap, with room id as key, room information as value.
+    pub fn data(&self) -> &HashMap<String, LiveRoomInfo> {
+        &self.data
+    }
 }
 
+/// Live room information
+#[derive(Serialize, Deserialize, Debug)]
+pub struct LiveRoomInfo {
+    pub area_name: String,
+    pub area_v2_name: String,
+    #[serde(with = "live_room_url_serde")]
+    pub cover_from_user: Option<Url>,
+    #[serde(with = "live_room_url_serde")]
+    pub keyframe: Option<Url>,
+    pub live_status: LiveStatus,
+    pub online: u64,
+    #[serde(with = "live_room_tag_name_serde")]
+    pub tag_name: Vec<String>,
+    pub uname: String,
+    pub uid: u64,
+    pub title: String,
+    pub room_id: u64,
+}
+
+/// This mod introduce a custom serialize and deserialize method for casting String to Vec<String>.
+/// In bilibili api, tag name are separate with comma `,` and group them in a single string.
+/// So when we serialize the json string to our LiveRoomInfo tag, we need a customized ser/de
+/// function to split string and join strings.
 mod live_room_tag_name_serde {
     use serde::{self, Deserialize, Deserializer, Serializer};
     pub fn serialize<S>(tag_name: &Vec<String>, serializer: S) -> Result<S::Ok, S::Error>
@@ -43,6 +58,42 @@ mod live_room_tag_name_serde {
     {
         let s = String::deserialize(deserializer)?;
         Ok(s.split(",").map(|s| s.to_string()).collect())
+    }
+}
+
+mod live_room_url_serde {
+    use serde::{self, de, Deserialize, Deserializer, Serializer};
+    use url::Url;
+
+    pub fn serialize<S>(s: &Option<Url>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match s {
+            Some(u) => serializer.serialize_str(&u.to_string()),
+            None => serializer.serialize_str(""),
+        }
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<Url>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        if s.is_empty() {
+            return Ok(None);
+        }
+
+        let url = match url::Url::parse(&s) {
+            Ok(u) => u,
+            Err(e) => {
+                return Err(de::Error::custom(format!(
+                    "Unexpected URL format. Parsing URL: {s} Got: {e}"
+                )))
+            }
+        };
+
+        Ok(Some(url))
     }
 }
 
@@ -175,10 +226,10 @@ fn test_json_2_live_room() {
             "手机直播".to_string(),
         ]
     );
-    assert_eq!(
-        info.cover_from_user,
-        Url::parse(
-            "http://i0.hdslb.com/bfs/live/new_room_cover/f3ed7a782c13086e536ec8bc6e9593bb4918f905.jpg"
-        ).unwrap()
-    );
+
+    let url = Url::parse(
+        "http://i0.hdslb.com/bfs/live/new_room_cover/f3ed7a782c13086e536ec8bc6e9593bb4918f905.jpg",
+    )
+    .unwrap();
+    assert_eq!(info.cover_from_user, Some(url));
 }
