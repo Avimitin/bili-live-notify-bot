@@ -23,19 +23,30 @@ impl MultiLiveRoomStatus {
 /// Live room information
 #[derive(Serialize, Deserialize, Debug)]
 pub struct LiveRoomInfo {
+    // 分区名
     pub area_name: String,
+    // 新版分区名
     pub area_v2_name: String,
+    // 直播间封面 URL
     #[serde(with = "live_room_url_serde")]
     pub cover_from_user: Option<Url>,
+    // 关键帧 URL
     #[serde(with = "live_room_url_serde")]
     pub keyframe: Option<Url>,
+    // 当前直播状态
     pub live_status: LiveStatus,
+    // 直播间在线人数
     pub online: u64,
+    // 直播间标签
     #[serde(with = "live_room_tag_name_serde")]
     pub tag_name: Vec<String>,
+    // 主播用户名
     pub uname: String,
+    // 主播的用户 ID
     pub uid: u64,
+    // 直播标题
     pub title: String,
+    // 直播间 ID
     pub room_id: u64,
 }
 
@@ -106,6 +117,24 @@ pub enum LiveStatus {
     Living,
     /// Represeting u8 number: 2
     Loop,
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ParseLiveStatusError {
+    #[error("Unknown status {0}")]
+    UnknownStatus(String),
+}
+
+impl LiveStatus {
+    pub fn from(s: &str) -> Result<Self, ParseLiveStatusError> {
+        let s = s.to_lowercase();
+        match s.as_str() {
+            "sleep" => Ok(Self::Sleep),
+            "loop" => Ok(Self::Loop),
+            "living" | "live" => Ok(Self::Living),
+            _ => Err(ParseLiveStatusError::UnknownStatus(s)),
+        }
+    }
 }
 
 impl Serialize for LiveStatus {
