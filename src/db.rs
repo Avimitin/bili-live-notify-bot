@@ -5,7 +5,6 @@ use crate::response_type::LiveStatus;
 use anyhow::Result;
 
 /// RepoOperator represent list of operation to database
-#[cfg_attr(test, mockall::automock)]
 #[async_trait::async_trait]
 pub trait RepoOperator {
     async fn add_live_room(&self, room_id: i64) -> Result<i32>;
@@ -17,11 +16,6 @@ pub trait RepoOperator {
     /// modified. The return list can be used as notify parameters.
     async fn update_live_room(&self, room_id: u64, live_status: LiveStatus) -> Result<Vec<u64>>;
     async fn remove_live_room(&self, room_id: u64) -> Result<()>;
-    async fn add_chat(&self, chat_id: u64) -> Result<u32>;
-    async fn remove_chat(&self, chat_id: u64) -> Result<u32>;
-    async fn register(&self, chat_id: u64, room_id: u64) -> Result<u32>;
-    async fn unregister(&self, chat_id: u64, room_id: u64) -> Result<u32>;
-    async fn get_regis(&self, room_id: u64) -> Result<Vec<u64>>;
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +28,13 @@ impl PgsqlRepoOperator {
     pub fn new(conn_pool: PgPool) -> Self {
         Self {
             conn_pool: Arc::new(conn_pool),
+        }
+    }
+
+    /// Create a repo operator by cloning pgpool holding by arc
+    pub fn from_arc(conn_pool: Arc<PgPool>) -> Self {
+        Self {
+            conn_pool
         }
     }
 }
@@ -90,34 +91,5 @@ WHERE room_id = $1;"#,
     }
     async fn remove_live_room(&self, room_id: u64) -> Result<()> {
         todo!()
-    }
-    async fn add_chat(&self, chat_id: u64) -> Result<u32> {
-        todo!()
-    }
-    async fn remove_chat(&self, chat_id: u64) -> Result<u32> {
-        todo!()
-    }
-    async fn register(&self, chat_id: u64, room_id: u64) -> Result<u32> {
-        todo!()
-    }
-    async fn unregister(&self, chat_id: u64, room_id: u64) -> Result<u32> {
-        todo!()
-    }
-    async fn get_regis(&self, room_id: u64) -> Result<Vec<u64>> {
-        todo!()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_add_live_room() {
-        let mut db = MockRepoOperator::new();
-        db.expect_add_live_room()
-            .times(1)
-            .with(mockall::predicate::eq(12345678_i64))
-            .returning(|_| Ok(1));
     }
 }
