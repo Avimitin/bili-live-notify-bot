@@ -1,5 +1,6 @@
 use serde::{de, Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::u8;
 use url::Url;
 
@@ -119,6 +120,16 @@ pub enum LiveStatus {
     Loop,
 }
 
+impl Display for LiveStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LiveStatus::Sleep => write!(f, "sleep"),
+            LiveStatus::Living => write!(f, "live"),
+            LiveStatus::Loop => write!(f, "loop"),
+        }
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum ParseLiveStatusError {
     #[error("Unknown status {0}")]
@@ -127,12 +138,20 @@ pub enum ParseLiveStatusError {
 
 impl LiveStatus {
     pub fn from(s: &str) -> Result<Self, ParseLiveStatusError> {
-        let s = s.to_lowercase();
+        let s = s.to_uppercase();
         match s.as_str() {
-            "sleep" => Ok(Self::Sleep),
-            "loop" => Ok(Self::Loop),
-            "living" | "live" => Ok(Self::Living),
+            "SLEEP" => Ok(Self::Sleep),
+            "LOOP" => Ok(Self::Loop),
+            "LIVING" | "LIVE" => Ok(Self::Living),
             _ => Err(ParseLiveStatusError::UnknownStatus(s)),
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            LiveStatus::Sleep => "SLEEP",
+            LiveStatus::Living => "LIVE",
+            LiveStatus::Loop => "LOOP",
         }
     }
 }
