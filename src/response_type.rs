@@ -57,7 +57,7 @@ pub struct LiveRoomInfo {
 /// function to split string and join strings.
 mod live_room_tag_name_serde {
     use serde::{self, Deserialize, Deserializer, Serializer};
-    pub fn serialize<S>(tag_name: &Vec<String>, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(tag_name: &[String], serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -69,7 +69,7 @@ mod live_room_tag_name_serde {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        Ok(s.split(",").map(|s| s.to_string()).collect())
+        Ok(s.split(',').map(|s| s.to_string()).collect())
     }
 }
 
@@ -82,7 +82,7 @@ mod live_room_url_serde {
         S: Serializer,
     {
         match s {
-            Some(u) => serializer.serialize_str(&u.to_string()),
+            Some(u) => serializer.serialize_str(u.as_ref()),
             None => serializer.serialize_str(""),
         }
     }

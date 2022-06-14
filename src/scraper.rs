@@ -30,7 +30,7 @@ impl MultiLiveRoomStatus {
             .await
             .with_context(|| format!("fail to get multi live room info with uids: {:?}", uids))?;
 
-        Ok(serde_json::from_slice(&resp_bytes)
-            .with_context(|| "fail to transcribe response to MultiLiveRoomStatus")?)
+        serde_json::from_slice(&resp_bytes)
+            .with_context(|| "fail to transcribe response to MultiLiveRoomStatus")
     }
 }

@@ -77,11 +77,11 @@ WHERE room_id = $1;"#,
         )
         .fetch_one(&*self.conn_pool)
         .await
-        .map_err(|e| GetLiveRoomStatusError::SqlError(e))?;
+        .map_err(GetLiveRoomStatusError::SqlError)?;
 
         let last_status = qry
             .last_status
-            .ok_or_else(|| GetLiveRoomStatusError::EmptyRoomStatus)?;
+            .ok_or(GetLiveRoomStatusError::EmptyRoomStatus)?;
         let status = LiveStatus::from(&last_status).unwrap();
         Ok(status)
     }
