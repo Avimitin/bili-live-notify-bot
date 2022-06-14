@@ -12,7 +12,7 @@ CREATE TABLE chats (
 
 CREATE TABLE live_rooms (
   id SERIAL PRIMARY KEY,
-  room_id BIGINT NOT NULL,
+  room_id BIGINT NOT NULL UNIQUE,
   uname TEXT,
   last_status VARCHAR(5) REFERENCES live_status(status),
   last_query_time time
