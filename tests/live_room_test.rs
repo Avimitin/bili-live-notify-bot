@@ -15,7 +15,7 @@ lazy_static::lazy_static! {
     };
     static ref RAW_PG_CONN: Arc<sqlx::PgPool> = {
         dotenv().ok();
-        let addr = std::env::var("BILI_NOTIFY_INTEGRATION_TEST_DB")
+        let addr = std::env::var("DATABASE_URL")
             .expect("no integration database address found");
         let pool = ASYNC_RT.block_on(sqlx::PgPool::connect(&addr)).expect("fail to connect to pg database");
         Arc::new(pool)
@@ -74,5 +74,23 @@ VALUES ($1, $2);"#,
 
     assert_eq!(get, expect);
 
+    block_on(clean_up());
+}
+
+#[test]
+fn test_get_all_live_rooms() {
+    let fut = sqlx::query!(
+        r#"
+INSERT INTO live_rooms (room_id)
+VALUES ( $1 ), ( $2 ), ( $3 ), ( $4 );
+        "#, 123456, 789101, 114514, 1919810,
+    ).execute(&**RAW_PG_CONN);
+
+    block_on(fut).expect("fail to initialize live rooms for get all");
+
+    let get = block_on(PG_DB.get_all_live_rooms()).expect("fail to get all live rooms");
+    let expect = vec![123456, 789101, 114514, 1919810];
+
+    assert_eq!(get, expect);
     block_on(clean_up());
 }

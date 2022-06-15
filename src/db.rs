@@ -16,6 +16,7 @@ pub trait RepoOperator {
     /// modified. The return list can be used as notify parameters.
     async fn update_live_room(&self, room_id: u64, live_status: LiveStatus) -> Result<Vec<u64>>;
     async fn remove_live_room(&self, room_id: u64) -> Result<()>;
+    async fn get_all_live_rooms(&self) -> Result<Vec<i64>>;
 }
 
 #[derive(Debug, Clone)]
@@ -33,9 +34,7 @@ impl PgsqlRepoOperator {
 
     /// Create a repo operator by cloning pgpool holding by arc
     pub fn from_arc(conn_pool: Arc<PgPool>) -> Self {
-        Self {
-            conn_pool
-        }
+        Self { conn_pool }
     }
 }
 
@@ -91,5 +90,24 @@ WHERE room_id = $1;"#,
     }
     async fn remove_live_room(&self, room_id: u64) -> Result<()> {
         todo!()
+    }
+
+    async fn get_all_live_rooms(&self) -> Result<Vec<i64>> {
+        let res = sqlx::query!(
+            r#"
+SELECT (room_id)
+FROM live_rooms;
+"#
+        )
+        .fetch_all(&*self.conn_pool)
+        .await;
+
+        match res {
+            Ok(rec) => Ok(rec.iter().map(|r| r.room_id).collect()),
+            Err(sqlx::Error::RowNotFound) => Ok(Vec::new()),
+            Err(e) => {
+                anyhow::bail!("fail to get all live rooms: {}", e)
+            }
+        }
     }
 }
