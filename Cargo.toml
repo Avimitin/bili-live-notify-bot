@@ -16,6 +16,7 @@ sqlx = { version = "0.5.13", features = [ "runtime-tokio-rustls", "postgres", "m
 async-trait = "0.1.56"
 thiserror = "1.0.31"
 dotenv = "0.15.0"
+diesel = { version = "1.4.8", features = [ "postgres" ]}
 
 [dev-dependencies]
 lazy_static = "1.4.0"
