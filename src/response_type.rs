@@ -133,17 +133,16 @@ impl Display for LiveStatus {
 #[derive(thiserror::Error, Debug)]
 pub enum ParseLiveStatusError {
     #[error("Unknown status {0}")]
-    UnknownStatus(String),
+    UnknownStatus(i32),
 }
 
 impl LiveStatus {
-    pub fn from(s: &str) -> Result<Self, ParseLiveStatusError> {
-        let s = s.to_uppercase();
-        match s.as_str() {
-            "SLEEP" => Ok(Self::Sleep),
-            "LOOP" => Ok(Self::Loop),
-            "LIVING" | "LIVE" => Ok(Self::Living),
-            _ => Err(ParseLiveStatusError::UnknownStatus(s)),
+    pub fn from(i: i32) -> Result<Self, ParseLiveStatusError> {
+        match i {
+            0 => Ok(Self::Sleep),
+            1 => Ok(Self::Living),
+            2 => Ok(Self::Loop),
+            _ => Err(ParseLiveStatusError::UnknownStatus(i)),
         }
     }
 

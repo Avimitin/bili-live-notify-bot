@@ -1,113 +1,84 @@
-use sqlx::postgres::PgPool;
+use crate::models::*;
+use crate::response_type::LiveStatus;
+use crate::schema::rooms;
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
+use std::fmt::Display;
 use std::sync::Arc;
 
-use crate::response_type::LiveStatus;
-use anyhow::Result;
-
-/// RepoOperator represent list of operation to database
-#[async_trait::async_trait]
-pub trait RepoOperator {
-    async fn add_live_room(&self, room_id: i64) -> Result<i32>;
-    async fn get_live_room_status(
-        &self,
-        room_id: i64,
-    ) -> Result<LiveStatus, GetLiveRoomStatusError>;
-    /// Compare the live status in database, update them and return a list of rooms that has been
-    /// modified. The return list can be used as notify parameters.
-    async fn update_live_room(&self, room_id: u64, live_status: LiveStatus) -> Result<Vec<u64>>;
-    async fn remove_live_room(&self, room_id: u64) -> Result<()>;
-    async fn get_all_live_rooms(&self) -> Result<Vec<i64>>;
+#[derive(Debug)]
+pub enum GetRoomQueryParams {
+    Id(i32),
+    RoomId(i64),
 }
 
-#[derive(Debug, Clone)]
-pub struct PgsqlRepoOperator {
-    conn_pool: Arc<PgPool>,
-}
-
-impl PgsqlRepoOperator {
-    /// Create a new pgsql connection pool which holded by Arc.
-    pub fn new(conn_pool: PgPool) -> Self {
-        Self {
-            conn_pool: Arc::new(conn_pool),
+impl Display for GetRoomQueryParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GetRoomQueryParams::Id(i) => write!(f, "serial id: {i}"),
+            GetRoomQueryParams::RoomId(i) => write!(f, "room id: {i}"),
         }
-    }
-
-    /// Create a repo operator by cloning pgpool holding by arc
-    pub fn from_arc(conn_pool: Arc<PgPool>) -> Self {
-        Self { conn_pool }
     }
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum GetLiveRoomStatusError {
-    #[error("no status found")]
-    EmptyRoomStatus,
-    #[error("fail to run sql query: {0}")]
-    SqlError(sqlx::Error),
+pub enum RepoOperationError<T: Display> {
+    #[error("Fail to get status for {param}: {raw}")]
+    GetRoomStatusError { param: GetRoomQueryParams, raw: T },
+    #[error("Invalid query parameter")]
+    InvalidQueryParamError,
+    #[error("No result found: {msg}")]
+    NoExpectResultFoundError { msg: String },
 }
 
-#[async_trait::async_trait]
-impl RepoOperator for PgsqlRepoOperator {
-    async fn add_live_room(&self, room_id: i64) -> Result<i32> {
-        let qry = sqlx::query!(
-            r#"
-INSERT INTO live_rooms ( room_id )
-VALUES ( $1 )
-RETURNING id;
-"#,
-            room_id
-        )
-        .fetch_one(&*self.conn_pool)
-        .await?;
+/// Repo keeps a immutable reference to the PostgreSQL connection pool.
+/// It capsulate most of the database operations
+pub struct Repo {
+    conn: Arc<PgConnection>,
+}
 
-        Ok(qry.id)
-    }
-
-    async fn get_live_room_status(
-        &self,
-        room_id: i64,
-    ) -> Result<LiveStatus, GetLiveRoomStatusError> {
-        let qry = sqlx::query!(
-            r#"
-SELECT last_status
-FROM live_rooms
-WHERE room_id = $1;"#,
-            room_id
-        )
-        .fetch_one(&*self.conn_pool)
-        .await
-        .map_err(GetLiveRoomStatusError::SqlError)?;
-
-        let last_status = qry
-            .last_status
-            .ok_or(GetLiveRoomStatusError::EmptyRoomStatus)?;
-        let status = LiveStatus::from(&last_status).unwrap();
-        Ok(status)
-    }
-
-    async fn update_live_room(&self, room_id: u64, live_status: LiveStatus) -> Result<Vec<u64>> {
-        todo!()
-    }
-    async fn remove_live_room(&self, room_id: u64) -> Result<()> {
-        todo!()
-    }
-
-    async fn get_all_live_rooms(&self) -> Result<Vec<i64>> {
-        let res = sqlx::query!(
-            r#"
-SELECT (room_id)
-FROM live_rooms;
-"#
-        )
-        .fetch_all(&*self.conn_pool)
-        .await;
-
-        match res {
-            Ok(rec) => Ok(rec.iter().map(|r| r.room_id).collect()),
-            Err(sqlx::Error::RowNotFound) => Ok(Vec::new()),
-            Err(e) => {
-                anyhow::bail!("fail to get all live rooms: {}", e)
-            }
+impl Repo {
+    /// Create a new struct to hold the given connection to PostgreSQL.
+    pub fn new(conn: PgConnection) -> Self {
+        Self {
+            conn: Arc::new(conn),
         }
+    }
+
+    pub async fn get_room_status(
+        &self,
+        id: Option<i32>,
+        room_id: Option<i64>,
+    ) -> Result<LiveStatus, RepoOperationError<diesel::result::Error>> {
+        let room = tokio::task::block_in_place(move || {
+            if let Some(id) = id {
+                rooms::table
+                    .filter(rooms::id.eq_all(id))
+                    .first::<Rooms>(&*self.conn)
+                    .map_err(|e| RepoOperationError::GetRoomStatusError {
+                        param: GetRoomQueryParams::Id(id),
+                        raw: e,
+                    })
+            } else if let Some(rid) = room_id {
+                rooms::table
+                    .filter(rooms::room_id.eq_all(rid))
+                    .first::<Rooms>(&*self.conn)
+                    .map_err(|e| RepoOperationError::GetRoomStatusError {
+                        param: GetRoomQueryParams::RoomId(rid),
+                        raw: e,
+                    })
+            } else {
+                return Err(RepoOperationError::InvalidQueryParamError);
+            }
+        })?;
+
+        let status =
+            room.last_status
+                .ok_or_else(|| RepoOperationError::NoExpectResultFoundError {
+                    msg: format!("No status found for room {}", room.room_id),
+                })?;
+
+        Ok(LiveStatus::from(status)
+            .expect("Unexpect live status appear, please check database health"))
     }
 }

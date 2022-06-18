@@ -3,7 +3,7 @@ CREATE TABLE chats (
   chat_id BIGINT NOT NULL
 );
 
-CREATE TABLE live_rooms (
+CREATE TABLE rooms (
   id SERIAL PRIMARY KEY,
   room_id BIGINT NOT NULL UNIQUE,
   uname TEXT,
@@ -11,8 +11,8 @@ CREATE TABLE live_rooms (
   last_query_time TIME
 );
 
-CREATE TABLE register_relation (
+CREATE TABLE regis (
   id SERIAL PRIMARY KEY,
-  rid BIGINT NOT NULL REFERENCES live_rooms(id),
-  cid BIGINT NOT NULL REFERENCES chats(id)
+  rid INT NOT NULL REFERENCES rooms(id),
+  cid INT NOT NULL REFERENCES chats(id)
 );
