@@ -10,7 +10,7 @@ impl MultiLiveRoomStatus {
     ///
     /// Return error if request fail, response code is not 200, response is empty text,
     /// response is not in JSON format, or the deserialize process fail.
-    pub async fn new(uids: Vec<u64>) -> Result<Self> {
+    pub async fn new(uids: &[i64]) -> Result<Self> {
         let param = HashMap::from([("uids", &uids)]);
 
         let client = reqwest::Client::new();
