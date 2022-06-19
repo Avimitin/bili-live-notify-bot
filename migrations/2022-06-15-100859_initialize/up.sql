@@ -4,11 +4,12 @@ CREATE TABLE chats (
 );
 
 CREATE TABLE rooms (
-  id SERIAL PRIMARY KEY,
-  room_id BIGINT NOT NULL UNIQUE,
-  uname TEXT,
-  last_status INT,
-  last_query_time TIME
+  id SERIAL PRIMARY KEY,          -- unique id in local
+  room_id BIGINT NOT NULL UNIQUE, -- room id for fetching
+  uname TEXT,                     -- room's owner user name
+  last_status INT,                -- room's last status
+  last_query_time TIME,           -- last query time for this rooms
+  archive BOOLEAN                 -- true if no chats register this room
 );
 
 CREATE TABLE regis (
