@@ -1,12 +1,13 @@
-use chrono::NaiveTime;
+use chrono::NaiveDateTime;
 
 #[derive(Queryable)]
 pub struct Rooms {
     pub id: i32,
     pub room_id: i64,
     pub uname: Option<String>,
-    pub last_status: Option<i32>,
-    pub last_query_time: Option<NaiveTime>,
+    pub status: i32,
+    pub updated_at: NaiveDateTime,
+    pub archive: Option<bool>,
 }
 
 #[derive(Queryable)]

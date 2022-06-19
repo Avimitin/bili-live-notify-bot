@@ -18,8 +18,9 @@ table! {
         id -> Int4,
         room_id -> Int8,
         uname -> Nullable<Text>,
-        last_status -> Nullable<Int4>,
-        last_query_time -> Nullable<Time>,
+        status -> Int4,
+        updated_at -> Timestamp,
+        archive -> Nullable<Bool>,
     }
 }
 
