@@ -48,7 +48,7 @@ pub struct LiveRoomInfo {
     // 直播标题
     pub title: String,
     // 直播间 ID
-    pub room_id: u64,
+    pub room_id: i64,
 }
 
 /// This mod introduce a custom serialize and deserialize method for casting String to Vec<String>.
@@ -136,21 +136,37 @@ pub enum ParseLiveStatusError {
     UnknownStatus(i32),
 }
 
-impl LiveStatus {
-    pub fn from(i: i32) -> Result<Self, ParseLiveStatusError> {
+impl From<i32> for LiveStatus {
+    fn from(i: i32) -> Self {
         match i {
-            0 => Ok(Self::Sleep),
-            1 => Ok(Self::Living),
-            2 => Ok(Self::Loop),
-            _ => Err(ParseLiveStatusError::UnknownStatus(i)),
+            0 => Self::Sleep,
+            1 => Self::Living,
+            2 => Self::Loop,
+            _ => Self::Sleep,
         }
     }
+}
 
+impl Into<i32> for LiveStatus {
+    fn into(self) -> i32 {
+        self.to_i32()
+    }
+}
+
+impl LiveStatus {
     pub fn as_str(&self) -> &str {
         match self {
             LiveStatus::Sleep => "SLEEP",
             LiveStatus::Living => "LIVE",
             LiveStatus::Loop => "LOOP",
+        }
+    }
+
+    pub fn to_i32(&self) -> i32 {
+        match self {
+            Self::Sleep => 0,
+            Self::Living => 1,
+            Self::Loop => 2,
         }
     }
 }

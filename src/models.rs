@@ -1,6 +1,8 @@
+use crate::schema::rooms;
 use chrono::NaiveDateTime;
 
-#[derive(Queryable)]
+#[derive(Queryable, Insertable)]
+#[table_name = "rooms"]
 pub struct Rooms {
     pub id: i32,
     pub room_id: i64,

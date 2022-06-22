@@ -1,5 +1,5 @@
 use crate::models::*;
-use crate::response_type::LiveStatus;
+use crate::response_type::{LiveStatus, MultiLiveRoomStatus};
 use crate::schema::rooms;
 use diesel::dsl::IntervalDsl;
 use diesel::pg::PgConnection;
@@ -79,8 +79,7 @@ impl Repo {
             }
         })?;
 
-        Ok(LiveStatus::from(room.status)
-            .expect("Unexpect live status appear, please check database health"))
+        Ok(LiveStatus::from(room.status))
     }
 
     /// Get all rooms that has outdated status and is pending for querying.
@@ -102,6 +101,30 @@ impl Repo {
         })?;
 
         Ok(rooms)
+    }
+
+    pub async fn update_rooms(&self, status: MultiLiveRoomStatus) -> anyhow::Result<()> {
+        let insert: Vec<(_, _, _)> = status
+            .data()
+            .values()
+            .map(|v| {
+                (
+                    rooms::room_id.eq(v.room_id),
+                    rooms::status.eq(v.live_status.to_i32()),
+                    rooms::updated_at.eq(diesel::dsl::now),
+                )
+            })
+            .collect();
+
+        let conn = self.conn.lock().await;
+        // TODO: return updated row
+        let _update = tokio::task::block_in_place(move || {
+            diesel::insert_into(rooms::table)
+                .values(&insert)
+                .execute(&*conn)
+        })?;
+
+        Ok(())
     }
 
     /// This function should only be used when we are testing/debugging
