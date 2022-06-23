@@ -103,28 +103,38 @@ impl Repo {
         Ok(rooms)
     }
 
-    pub async fn update_rooms(&self, status: MultiLiveRoomStatus) -> anyhow::Result<()> {
-        let insert: Vec<(_, _, _)> = status
-            .data()
-            .values()
-            .map(|v| {
-                (
-                    rooms::room_id.eq(v.room_id),
-                    rooms::status.eq(v.live_status.to_i32()),
-                    rooms::updated_at.eq(diesel::dsl::now),
-                )
-            })
-            .collect();
+    pub async fn update_rooms(&self, status: MultiLiveRoomStatus) -> anyhow::Result<Vec<i64>> {
+        let length = status.data().len();
+        // FIXME: We should use the insertable Room struct
+        let (update_query, status_query) = status.data().values().fold(
+            (Vec::with_capacity(length), Vec::with_capacity(length)),
+            |mut acc, x| -> (Vec<_>, Vec<_>) {
+                acc.0.push(rooms::updated_at.eq(diesel::dsl::now));
+                acc.1.push((
+                    rooms::room_id.eq(x.room_id),
+                    rooms::status.eq(x.live_status.to_i32()),
+                ));
+
+                acc
+            },
+        );
 
         let conn = self.conn.lock().await;
-        // TODO: return updated row
-        let _update = tokio::task::block_in_place(move || {
+        tokio::task::block_in_place(move || {
             diesel::insert_into(rooms::table)
-                .values(&insert)
+                .values(&update_query)
                 .execute(&*conn)
-        })?;
+        })?; // <- conn mutex guard consume here
 
-        Ok(())
+        let conn = self.conn.lock().await;
+        let updated_rooms: Vec<i64> = tokio::task::block_in_place(move || {
+            diesel::insert_into(rooms::table)
+                .values(&status_query)
+                .returning(rooms::room_id)
+                .get_results(&*conn)
+        })?; // conn mutex guard consume here
+
+        Ok(updated_rooms)
     }
 
     /// This function should only be used when we are testing/debugging
