@@ -9,7 +9,7 @@ CREATE TABLE rooms (
   uname         TEXT,                           -- room's owner user name
   status        INT NOT NULL,                   -- room's last status
   last_query_at TIMESTAMP,                      -- last query time for this rooms
-  updated_at    TIMESTAMP NOT NULL              -- last update time for this row
+  updated_at    TIMESTAMP NOT NULL,             -- last update time for this row
   archive       BOOLEAN NOT NULL DEFAULT FALSE  -- true if no chats register this room
 );
 
