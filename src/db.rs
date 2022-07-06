@@ -1,148 +1,160 @@
-use crate::models::*;
-use crate::response_type::{LiveStatus, MultiLiveRoomStatus};
-use crate::schema::rooms;
-use diesel::dsl::IntervalDsl;
-use diesel::pg::PgConnection;
-use diesel::prelude::*;
-use std::fmt::Display;
+use sqlx::postgres::PgPool;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
-#[derive(Debug)]
-pub enum GetRoomQueryParams {
-    Id(i32),
-    RoomId(i64),
-}
+use crate::response_type::LiveStatus;
 
-impl Display for GetRoomQueryParams {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GetRoomQueryParams::Id(i) => write!(f, "serial id: {i}"),
-            GetRoomQueryParams::RoomId(i) => write!(f, "room id: {i}"),
-        }
-    }
+#[derive(Debug, Default)]
+pub struct Room {
+    room_id: i64,
+    status: Option<LiveStatus>,
+    username: Option<String>,
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum RepoOperationError<T: Display> {
-    #[error("Fail to get status for {param}: {raw}")]
-    GetRoomStatusError { param: GetRoomQueryParams, raw: T },
-    #[error("Invalid query parameter")]
-    InvalidQueryParamError,
-    #[error("No result found: {msg}")]
-    NoExpectResultFoundError { msg: String },
-    #[error("Fail to get pending rooms: {msg}")]
-    GetPendingRoomsError { msg: String, source: T },
+pub enum DbOperationError {
+    #[error("Unexpected error: {source}")]
+    UnexpectedError {
+        #[source]
+        source: sqlx::Error,
+    },
+
+    #[error("No any primary id or room id specify for query")]
+    NoIdForRoomsError,
+
+    #[error("No result for given qualification")]
+    NoResult,
 }
 
-/// Repo keeps a immutable reference to the PostgreSQL connection pool.
-/// It capsulate most of the database operations
-#[derive(Clone)]
-pub struct Repo {
-    conn: Arc<Mutex<PgConnection>>,
+#[derive(Debug)]
+pub enum Duration {
+    Minutes(i32),
+    Hours(i32),
+    Days(i32),
 }
 
-impl Repo {
-    /// Create a new struct to hold the given connection to PostgreSQL.
-    pub fn new(conn: PgConnection) -> Self {
+impl Duration {
+    fn as_str(&self) -> String {
+        match self {
+            Self::Days(i) => {
+                format!("{i} days")
+            }
+            Self::Hours(i) => {
+                format!("{i} hours")
+            }
+            Self::Minutes(i) => {
+                format!("{i} minutes")
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Duration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RoomsOperator;
+
+impl RoomsOperator {
+    /// Get room status by local db primary id OR room id.
+    ///
+    /// Return error when:
+    ///     * neither primary id nor room id was given.
+    ///     * no result found
+    ///     * internal db error (call error.source() to trace error)
+    pub async fn get_status_by_id(
+        conn: &PgPool,
+        pid: Option<i32>,
+        rid: Option<i64>,
+    ) -> Result<Room, DbOperationError> {
+        if pid.is_none() && rid.is_none() {
+            return Err(DbOperationError::NoIdForRoomsError);
+        }
+
+        let wrap_err = |oe: sqlx::Error| match oe {
+            sqlx::Error::RowNotFound => DbOperationError::NoResult,
+            _ => DbOperationError::UnexpectedError { source: oe },
+        };
+
+        if pid.is_none() {
+            let rid = rid.unwrap();
+
+            let resp = sqlx::query!(r#"SELECT status, uname FROM rooms WHERE room_id = $1"#, rid)
+                .fetch_one(conn)
+                .await
+                .map_err(wrap_err)?;
+
+            return Ok(Room {
+                room_id: rid,
+                status: Some(resp.status.into()),
+                username: resp.uname,
+            });
+        }
+
+        let pid = pid.unwrap();
+
+        let resp = sqlx::query!(
+            r#"SELECT room_id, status, uname FROM rooms WHERE id = $1"#,
+            pid
+        )
+        .fetch_one(conn)
+        .await
+        .map_err(wrap_err)?;
+
+        return Ok(Room {
+            room_id: resp.room_id,
+            status: Some(resp.status.into()),
+            username: resp.uname,
+        });
+    }
+
+    pub async fn get_pending(
+        conn: &PgPool,
+        dur: chrono::Duration,
+    ) -> Result<Vec<i64>, DbOperationError> {
+        let dur: sqlx::postgres::types::PgInterval = dur
+            .try_into()
+            .expect("Fail to convert chrono Duration to PostgreSQL Interval, please check the code in line 117.");
+
+        let err_wrapper = |oe: sqlx::Error| match oe {
+            sqlx::Error::RowNotFound => DbOperationError::NoResult,
+            _ => DbOperationError::UnexpectedError { source: oe },
+        };
+
+        let resp = sqlx::query!(
+            r#"SELECT room_id FROM rooms WHERE last_query_at < NOW() - $1::interval;"#,
+            dur
+        )
+        .fetch_all(conn)
+        .await
+        .map_err(err_wrapper)?;
+
+        Ok(resp.iter().map(|r| r.room_id).collect())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Chats;
+#[derive(Clone, Debug)]
+pub struct Regis;
+
+#[derive(Clone, Debug)]
+pub struct LiveStatusRepo {
+    connection_pool: Arc<PgPool>,
+}
+
+impl LiveStatusRepo {
+    /// Create a new repository operator with given PostgreSQL connection.
+    pub fn new(conn: PgPool) -> Self {
         Self {
-            conn: Arc::new(Mutex::new(conn)),
+            connection_pool: Arc::new(conn),
         }
     }
 
-    /// Get room status by room id or local id.
-    pub async fn get_room_status(
-        &self,
-        id: Option<i32>,
-        room_id: Option<i64>,
-    ) -> Result<LiveStatus, RepoOperationError<diesel::result::Error>> {
-        let conn = self.conn.lock().await;
-        let room = tokio::task::block_in_place(move || {
-            if let Some(id) = id {
-                rooms::table
-                    .filter(rooms::id.eq_all(id))
-                    .first::<Rooms>(&*conn)
-                    .map_err(|e| RepoOperationError::GetRoomStatusError {
-                        param: GetRoomQueryParams::Id(id),
-                        raw: e,
-                    })
-            } else if let Some(rid) = room_id {
-                rooms::table
-                    .filter(rooms::room_id.eq_all(rid))
-                    .first::<Rooms>(&*conn)
-                    .map_err(|e| RepoOperationError::GetRoomStatusError {
-                        param: GetRoomQueryParams::RoomId(rid),
-                        raw: e,
-                    })
-            } else {
-                Err(RepoOperationError::InvalidQueryParamError)
-            }
-        })?;
-
-        Ok(LiveStatus::from(room.status))
-    }
-
-    /// Get all rooms that has outdated status and is pending for querying.
-    pub async fn get_pending_rooms(
-        &self,
-    ) -> Result<Vec<i64>, RepoOperationError<diesel::result::Error>> {
-        let conn = self.conn.lock().await;
-
-        // TODO: make interval value configurable
-        let rooms = tokio::task::block_in_place(move || {
-            rooms::table
-                .filter(rooms::updated_at.gt(diesel::dsl::now + 1.minutes()))
-                .select(rooms::room_id)
-                .load::<i64>(&*conn)
-                .map_err(|e| RepoOperationError::GetPendingRoomsError {
-                    msg: "fail to load all pending rooms".to_string(),
-                    source: e,
-                })
-        })?;
-
-        Ok(rooms)
-    }
-
-    pub async fn update_rooms(&self, status: MultiLiveRoomStatus) -> anyhow::Result<Vec<i64>> {
-        let length = status.data().len();
-        // FIXME: We should use the insertable Room struct
-        let (update_query, status_query) = status.data().values().fold(
-            (Vec::with_capacity(length), Vec::with_capacity(length)),
-            |mut acc, x| -> (Vec<_>, Vec<_>) {
-                acc.0.push(rooms::updated_at.eq(diesel::dsl::now));
-                acc.1.push((
-                    rooms::room_id.eq(x.room_id),
-                    rooms::status.eq(x.live_status.to_i32()),
-                ));
-
-                acc
-            },
-        );
-
-        let conn = self.conn.lock().await;
-        tokio::task::block_in_place(move || {
-            diesel::insert_into(rooms::table)
-                .values(&update_query)
-                .execute(&*conn)
-        })?; // <- conn mutex guard consume here
-
-        let conn = self.conn.lock().await;
-        let updated_rooms: Vec<i64> = tokio::task::block_in_place(move || {
-            diesel::insert_into(rooms::table)
-                .values(&status_query)
-                .returning(rooms::room_id)
-                .get_results(&*conn)
-        })?; // conn mutex guard consume here
-
-        Ok(updated_rooms)
-    }
-
-    /// This function should only be used when we are testing/debugging
-    #[cfg(debug_assertions)]
-    pub async fn raw_execute(&self, query: &str) {
-        let conn = self.conn.lock().await;
-        diesel::sql_query(query)
-            .execute(&*conn)
-            .unwrap_or_else(|_| panic!("fail to execute query: {query}"));
+    /// Immutably access the connection
+    pub fn conn(&self) -> &PgPool {
+        &self.connection_pool
     }
 }

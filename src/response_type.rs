@@ -136,13 +136,13 @@ pub enum ParseLiveStatusError {
     UnknownStatus(i32),
 }
 
-impl From<i32> for LiveStatus {
-    fn from(i: i32) -> Self {
-        match i {
-            0 => Self::Sleep,
-            1 => Self::Living,
-            2 => Self::Loop,
-            _ => Self::Sleep,
+impl Into<LiveStatus> for i32 {
+    fn into(self) -> LiveStatus {
+        match self {
+            0 => LiveStatus::Sleep,
+            1 => LiveStatus::Living,
+            2 => LiveStatus::Loop,
+            _ => LiveStatus::Sleep,
         }
     }
 }

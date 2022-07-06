@@ -1,3 +1,5 @@
+-- Add up migration script here
+
 CREATE TABLE chats (
   id SERIAL PRIMARY KEY,
   chat_id BIGINT NOT NULL
