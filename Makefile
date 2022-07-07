@@ -2,9 +2,10 @@
 setup-dev:
 	# Run PostgreSQL
 	sudo systemctl start postgresql
-	# Run diesel migration
-	@diesel database reset
-	@diesel setup
+	# Run sqlx migration
+	@sqlx db drop -y
+	@sqlx db create
+	@sqlx migrate run
 
 .PHONY: test
 test: test_live_room test_scraper
