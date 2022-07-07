@@ -15,7 +15,6 @@ url = { version = "2.2.2", features = ["serde"] }
 async-trait = "0.1.56"
 thiserror = "1.0.31"
 dotenv = "0.15.0"
-diesel = { version = "1.4.8", features = [ "postgres", "chrono" ]}
 chrono = "0.4.19"
 
 [dependencies.sqlx]
