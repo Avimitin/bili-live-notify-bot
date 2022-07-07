@@ -83,9 +83,9 @@ impl RoomsOperator {
 
     pub async fn get_pending(
         conn: &PgPool,
-        dur: chrono::Duration,
+        dur: &chrono::Duration,
     ) -> Result<Vec<i64>, DbOperationError> {
-        let dur: sqlx::postgres::types::PgInterval = dur
+        let dur: sqlx::postgres::types::PgInterval = (*dur)
             .try_into()
             .expect("Fail to convert chrono Duration to PostgreSQL Interval, please check the code in line 117.");
 
@@ -103,6 +103,46 @@ impl RoomsOperator {
         .map_err(err_wrapper)?;
 
         Ok(resp.iter().map(|r| r.room_id).collect())
+    }
+
+    pub async fn update_status(
+        conn: &PgPool,
+        new: &crate::response_type::MultiLiveRoomStatus,
+    ) -> Vec<i64> {
+        let new_data: Vec<(i64, i32)> = new
+            .data()
+            .values()
+            .map(|room| (room.room_id, room.live_status.to_i32()))
+            .collect();
+
+        // transaction will be commited after the _transaction_guard value droped
+        let _transaction_guard = conn.begin().await.expect("fail to start transaction");
+
+        let mut updated = Vec::with_capacity(new_data.len());
+
+        // NOTES: This implementation might have performance issue.
+        // A better implementation is still needed.
+        for data in &new_data {
+            let row = sqlx::query!(
+                r#"
+UPDATE rooms
+SET status = $1, updated_at = NOW()
+WHERE room_id = $2 AND status != 1
+RETURNING room_id
+"#,
+                data.1,
+                data.0
+            )
+            .fetch_optional(conn)
+            .await
+            .expect("fail to update room status");
+
+            if let Some(row) = row {
+                updated.push(row.room_id)
+            }
+        }
+
+        updated
     }
 }
 
