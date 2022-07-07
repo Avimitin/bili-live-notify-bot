@@ -1,7 +1,13 @@
 .PHONY: setup-dev
-setup-dev:
+setup-dev: init-pgsql init-db
+
+.PHONY: init-pgsql
+init-pgsql:
 	# Run PostgreSQL
 	sudo systemctl start postgresql
+
+.PHONY: init-db
+init-db:
 	# Run sqlx migration
 	@sqlx db drop -y
 	@sqlx db create
