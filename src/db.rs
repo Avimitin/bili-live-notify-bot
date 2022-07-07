@@ -25,35 +25,6 @@ pub enum DbOperationError {
     NoResult,
 }
 
-#[derive(Debug)]
-pub enum Duration {
-    Minutes(i32),
-    Hours(i32),
-    Days(i32),
-}
-
-impl Duration {
-    fn as_str(&self) -> String {
-        match self {
-            Self::Days(i) => {
-                format!("{i} days")
-            }
-            Self::Hours(i) => {
-                format!("{i} hours")
-            }
-            Self::Minutes(i) => {
-                format!("{i} minutes")
-            }
-        }
-    }
-}
-
-impl std::fmt::Display for Duration {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct RoomsOperator;
 
